@@ -28,7 +28,7 @@ export default function Navbar() {
     }`
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#070707]/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-white/[0.10] bg-[#090909]/60 supports-[backdrop-filter]:bg-[#090909]/45 backdrop-blur-[24px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(24px)_saturate(180%)] shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
       <div className="fd-container flex h-[74px] items-center justify-between gap-5">
         <Link to="/" className="group flex items-center gap-2.5" aria-label="FattiDiretti Home">
           <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-red-600 text-[11px] font-black tracking-[-.04em] text-white shadow-[0_0_26px_rgba(220,38,38,.2)]">
@@ -84,7 +84,7 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-white/[0.07] bg-[#090909] md:hidden">
+        <div className="border-t border-white/[0.10] bg-[#090909]/75 backdrop-blur-[24px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(24px)_saturate(180%)] md:hidden">
           <div className="fd-container flex flex-col py-4 text-base font-bold text-white">
             <Link to="/" className="border-b border-white/[0.07] py-3.5">Home</Link>
             <Link to="/articles" className="border-b border-white/[0.07] py-3.5">Articoli</Link>
