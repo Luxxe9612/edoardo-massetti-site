@@ -18,7 +18,7 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from "firebase/auth"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 import ReactQuill from "react-quill-new"
 import "react-quill-new/dist/quill.snow.css"
 import {
@@ -90,6 +90,11 @@ export default function AdminPage() {
   const [articleCoverFile, setArticleCoverFile] = useState(null)
   const [podcastCoverFile, setPodcastCoverFile] = useState(null)
   const [podcastVideoFile, setPodcastVideoFile] = useState(null)
+  const [podcastBusy, setPodcastBusy] = useState(false)
+  const [podcastProgress, setPodcastProgress] = useState(null)
+  const [podcastStage, setPodcastStage] = useState("")
+  const [podcastErrors, setPodcastErrors] = useState({})
+  const [deletingPodcastId, setDeletingPodcastId] = useState(null)
 
   const [message, setMessage] = useState("")
   const [archiveTab, setArchiveTab] = useState("articles")
@@ -390,76 +395,70 @@ export default function AdminPage() {
     }
   }
 
-  async function savePodcast() {
-    if (!isAdmin) return
+  async function uploadPodcastFile(file, folder, stage) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-")
+    const fileRef = ref(storage, `${folder}/${Date.now()}-${safeName}`)
+    setPodcastStage(stage)
+    setPodcastProgress(0)
+    const task = uploadBytesResumable(fileRef, file)
+    await new Promise((resolve, reject) => {
+      task.on("state_changed", snapshot => {
+        setPodcastProgress(snapshot.totalBytes ? Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100) : 0)
+      }, reject, resolve)
+    })
+    return getDownloadURL(task.snapshot.ref)
+  }
 
-    if (
-      !podcastForm.title ||
-      !podcastForm.category ||
-      !podcastForm.description
-    ) {
-      setMessage("Compila titolo, categoria e descrizione podcast.")
+  async function savePodcast() {
+    if (!isAdmin || podcastBusy) return
+    const errors = {}
+    if (!podcastForm.title.trim()) errors.title = "Il titolo è obbligatorio."
+    if (!podcastForm.category.trim()) errors.category = "La categoria è obbligatoria."
+    if (!podcastForm.description.trim()) errors.description = "La descrizione del podcast è obbligatoria."
+    if (!podcastVideoFile && !podcastForm.videoUrl.trim()) errors.video = "Carica un video oppure inserisci un URL."
+    setPodcastErrors(errors)
+    if (Object.keys(errors).length) {
+      setMessage("Completa i campi obbligatori del podcast.")
+      document.getElementById(`podcast-${Object.keys(errors)[0]}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
-
+    setPodcastBusy(true)
+    setPodcastProgress(null)
+    setPodcastStage("Preparazione pubblicazione...")
+    setMessage("")
     try {
-      setMessage("Salvataggio podcast in corso...")
-
-      const uploadedCoverUrl = podcastCoverFile
-        ? await uploadFile(podcastCoverFile, "podcasts/covers")
-        : podcastForm.coverImage
-
-      const uploadedVideoUrl = podcastVideoFile
-        ? await uploadFile(podcastVideoFile, "podcasts/videos")
-        : podcastForm.videoUrl
-
-      if (!uploadedVideoUrl) {
-        setMessage("Carica un video podcast oppure inserisci un URL video.")
-        return
-      }
-
+      const coverImage = podcastCoverFile ? await uploadPodcastFile(podcastCoverFile, "podcasts/covers", "Caricamento copertina...") : podcastForm.coverImage
+      const videoUrl = podcastVideoFile ? await uploadPodcastFile(podcastVideoFile, "podcasts/videos", "Caricamento video...") : podcastForm.videoUrl.trim()
+      setPodcastProgress(null)
+      setPodcastStage("Salvataggio podcast...")
       const podcastData = {
-        slug: createSlug(podcastForm.title),
-        ...podcastForm,
-        coverImage: uploadedCoverUrl,
-        videoUrl: uploadedVideoUrl,
-        createdAt: editingPodcastId
-          ? podcastForm.createdAt || serverTimestamp()
-          : serverTimestamp(),
+        slug: createSlug(podcastForm.title), ...podcastForm, coverImage, videoUrl,
+        createdAt: editingPodcastId ? podcastForm.createdAt || serverTimestamp() : serverTimestamp(),
         updatedAt: serverTimestamp(),
-        publishDate:
-          podcastForm.publishDate || new Date().toLocaleDateString("it-IT"),
+        publishDate: podcastForm.publishDate || new Date().toLocaleDateString("it-IT"),
         seoTitle: podcastForm.seoTitle || podcastForm.title,
         seoDescription: podcastForm.seoDescription || podcastForm.description,
       }
-
       if (editingPodcastId) {
         await updateDoc(doc(db, "podcasts", editingPodcastId), podcastData)
         setEditingPodcastId(null)
-        setMessage("Podcast modificato.")
+        setMessage("Podcast modificato correttamente.")
       } else {
         await addDoc(collection(db, "podcasts"), podcastData)
-        setMessage("Podcast pubblicato.")
+        setMessage("Podcast pubblicato correttamente.")
       }
-
-      setPodcastForm({
-        title: "",
-        category: "",
-        description: "",
-        content: "",
-        coverImage: "",
-        videoUrl: "",
-        publishDate: "",
-        seoTitle: "",
-        seoDescription: "",
-        createdAt: null,
-      })
-
+      setPodcastForm({ title: "", category: "", description: "", content: "", coverImage: "", videoUrl: "", publishDate: "", seoTitle: "", seoDescription: "", createdAt: null })
       setPodcastCoverFile(null)
       setPodcastVideoFile(null)
-      loadDashboard()
+      setPodcastErrors({})
+      void loadDashboard()
     } catch (error) {
+      console.error("Errore podcast:", error)
       setMessage("Errore podcast: " + error.message)
+    } finally {
+      setPodcastBusy(false)
+      setPodcastProgress(null)
+      setPodcastStage("")
     }
   }
 
@@ -503,9 +502,21 @@ export default function AdminPage() {
   }
 
   async function deletePodcast(id) {
-    await deleteDoc(doc(db, "podcasts", id))
-    setMessage("Podcast eliminato.")
-    loadDashboard()
+    if (!isAdmin || deletingPodcastId) return
+    const item = podcasts.find(podcast => podcast.id === id)
+    if (!window.confirm(`Eliminare definitivamente il podcast "${item?.title || "selezionato"}"?`)) return
+    setDeletingPodcastId(id)
+    setMessage("Eliminazione podcast in corso...")
+    try {
+      await deleteDoc(doc(db, "podcasts", id))
+      setPodcasts(current => current.filter(podcast => podcast.id !== id))
+      setMessage("Podcast eliminato correttamente.")
+    } catch (error) {
+      console.error("Errore eliminazione podcast:", error)
+      setMessage("Impossibile eliminare il podcast: " + error.message)
+    } finally {
+      setDeletingPodcastId(null)
+    }
   }
 
   const archiveSource = archiveTab === "articles" ? articles : podcasts
@@ -1032,7 +1043,8 @@ export default function AdminPage() {
                   <div className="space-y-3.5">
                     <input
                       type="text"
-                      placeholder="Titolo podcast"
+                      id="podcast-title"
+                       placeholder="Titolo podcast"
                       value={podcastForm.title}
                       onChange={(e) =>
                         setPodcastForm({
@@ -1040,13 +1052,15 @@ export default function AdminPage() {
                           title: e.target.value,
                         })
                       }
-                      className={fieldClass}
+                      className={`${fieldClass} ${podcastErrors.title ? "border-red-500" : ""}`}
                     />
+                     {podcastErrors.title && <p role="alert" className="text-xs text-red-400">{podcastErrors.title}</p>}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <input
                         type="text"
-                        placeholder="Categoria podcast"
+                        id="podcast-category"
+                       placeholder="Categoria podcast"
                         value={podcastForm.category}
                         onChange={(e) =>
                           setPodcastForm({
@@ -1054,8 +1068,9 @@ export default function AdminPage() {
                             category: e.target.value,
                           })
                         }
-                        className={fieldClass}
+                        className={`${fieldClass} ${podcastErrors.category ? "border-red-500" : ""}`}
                       />
+                     {podcastErrors.category && <p role="alert" className="text-xs text-red-400">{podcastErrors.category}</p>}
 
                       <div>
                         <label className="mb-2 block text-[9px] font-black uppercase tracking-[.14em] text-white/28">
@@ -1121,7 +1136,8 @@ export default function AdminPage() {
 
                     <input
                       type="text"
-                      placeholder="URL video (opzionale se carichi un file)"
+                      id="podcast-video"
+                       placeholder="URL video (opzionale se carichi un file)"
                       value={podcastForm.videoUrl}
                       onChange={(e) =>
                         setPodcastForm({
@@ -1129,12 +1145,14 @@ export default function AdminPage() {
                           videoUrl: e.target.value,
                         })
                       }
-                      className={fieldClass}
+                      className={`${fieldClass} ${podcastErrors.video ? "border-red-500" : ""}`}
                     />
+                     {podcastErrors.video && <p role="alert" className="text-xs text-red-400">{podcastErrors.video}</p>}
 
                     <textarea
                       rows="3"
-                      placeholder="Descrizione breve"
+                      id="podcast-description"
+                       placeholder="Descrizione breve"
                       value={podcastForm.description}
                       onChange={(e) =>
                         setPodcastForm({
@@ -1142,8 +1160,9 @@ export default function AdminPage() {
                           description: e.target.value,
                         })
                       }
-                      className={`${fieldClass} resize-none`}
+                      className={`${fieldClass} resize-none ${podcastErrors.description ? "border-red-500" : ""}`}
                     />
+                     {podcastErrors.description && <p role="alert" className="text-xs text-red-400">{podcastErrors.description}</p>}
 
                     <div className="admin-editor h-[250px] overflow-hidden rounded-[16px] border border-white/[0.08] bg-white [&_.quill]:h-full [&_.ql-container]:h-[205px] [&_.ql-editor]:h-full [&_.ql-editor]:overflow-y-auto">
                       <ReactQuill
@@ -1188,11 +1207,16 @@ export default function AdminPage() {
 
                     <button
                       onClick={savePodcast}
+                       disabled={podcastBusy}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-[14px] bg-red-600 px-6 py-3.5 text-sm font-black text-white transition hover:bg-red-500"
                     >
-                      <Save size={16} />
-                      {editingPodcastId ? "Salva modifiche" : "Pubblica podcast"}
-                    </button>
+                      {podcastBusy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Save size={16} />}
+                       {podcastBusy ? podcastStage : (editingPodcastId ? "Salva modifiche" : "Pubblica podcast")}
+                     </button>
+                     {podcastBusy && <div role="status" aria-live="polite" className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-white/80">
+                       <p>{podcastStage} {podcastProgress !== null ? `${podcastProgress}%` : ""}</p>
+                       {podcastProgress !== null && <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${podcastProgress}%` }} /></div>}
+                     </div>}
                   </div>
                 </div>
               </div>
@@ -1351,9 +1375,10 @@ export default function AdminPage() {
                                 : deletePodcast(item.id)
                             }
                             className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/15 bg-red-500/[0.06] text-red-400 transition hover:bg-red-500/15"
-                            aria-label={`Elimina ${archiveTab === "articles" ? "articolo" : "podcast"}`}
+                            disabled={archiveTab === "podcasts" && deletingPodcastId !== null}
+                             aria-label={`Elimina ${archiveTab === "articles" ? "articolo" : "podcast"}`}
                           >
-                            <Trash2 size={14} />
+                            {archiveTab === "podcasts" && deletingPodcastId === item.id ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-400/30 border-t-red-400" /> : <Trash2 size={14} />}
                           </button>
                         </div>
                       </div>
