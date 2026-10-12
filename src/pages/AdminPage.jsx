@@ -94,6 +94,7 @@ export default function AdminPage() {
   const [podcastProgress, setPodcastProgress] = useState(null)
   const [podcastStage, setPodcastStage] = useState("")
   const [podcastErrors, setPodcastErrors] = useState({})
+  const [podcastNotice, setPodcastNotice] = useState(null)
   const [deletingPodcastId, setDeletingPodcastId] = useState(null)
 
   const [message, setMessage] = useState("")
@@ -418,14 +419,14 @@ export default function AdminPage() {
     if (!podcastVideoFile && !podcastForm.videoUrl.trim()) errors.video = "Carica un video oppure inserisci un URL."
     setPodcastErrors(errors)
     if (Object.keys(errors).length) {
-      setMessage("Completa i campi obbligatori del podcast.")
+      setPodcastNotice({ type: "error", text: "Completa i campi obbligatori evidenziati." })
       document.getElementById(`podcast-${Object.keys(errors)[0]}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
+    setPodcastNotice(null)
     setPodcastBusy(true)
     setPodcastProgress(null)
     setPodcastStage("Preparazione pubblicazione...")
-    setMessage("")
     try {
       const coverImage = podcastCoverFile ? await uploadPodcastFile(podcastCoverFile, "podcasts/covers", "Caricamento copertina...") : podcastForm.coverImage
       const videoUrl = podcastVideoFile ? await uploadPodcastFile(podcastVideoFile, "podcasts/videos", "Caricamento video...") : podcastForm.videoUrl.trim()
@@ -442,10 +443,10 @@ export default function AdminPage() {
       if (editingPodcastId) {
         await updateDoc(doc(db, "podcasts", editingPodcastId), podcastData)
         setEditingPodcastId(null)
-        setMessage("Podcast modificato correttamente.")
+        setPodcastNotice({ type: "success", text: "Podcast modificato correttamente." })
       } else {
         await addDoc(collection(db, "podcasts"), podcastData)
-        setMessage("Podcast pubblicato correttamente.")
+        setPodcastNotice({ type: "success", text: "Podcast pubblicato correttamente." })
       }
       setPodcastForm({ title: "", category: "", description: "", content: "", coverImage: "", videoUrl: "", publishDate: "", seoTitle: "", seoDescription: "", createdAt: null })
       setPodcastCoverFile(null)
@@ -454,7 +455,7 @@ export default function AdminPage() {
       void loadDashboard()
     } catch (error) {
       console.error("Errore podcast:", error)
-      setMessage("Errore podcast: " + error.message)
+      setPodcastNotice({ type: "error", text: "Errore podcast: " + error.message })
     } finally {
       setPodcastBusy(false)
       setPodcastProgress(null)
@@ -479,6 +480,8 @@ export default function AdminPage() {
   }
 
   function editPodcast(podcast) {
+    setPodcastNotice(null)
+    setPodcastErrors({})
     setEditingPodcastId(podcast.id)
 
     setPodcastForm({
@@ -1205,6 +1208,11 @@ export default function AdminPage() {
                       />
                     </div>
 
+                    {podcastNotice && (
+                      <div role="alert" aria-live="polite" className={`rounded-[14px] border px-4 py-3 text-sm font-semibold ${podcastNotice.type === "success" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+                        {podcastNotice.text}
+                      </div>
+                    )}
                     <button
                       onClick={savePodcast}
                        disabled={podcastBusy}
@@ -1214,8 +1222,11 @@ export default function AdminPage() {
                        {podcastBusy ? podcastStage : (editingPodcastId ? "Salva modifiche" : "Pubblica podcast")}
                      </button>
                      {podcastBusy && <div role="status" aria-live="polite" className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-white/80">
-                       <p>{podcastStage} {podcastProgress !== null ? `${podcastProgress}%` : ""}</p>
-                       {podcastProgress !== null && <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${podcastProgress}%` }} /></div>}
+                       <div className="flex items-center justify-between gap-3">
+                         <p className="font-bold">{podcastStage}</p>
+                         {podcastProgress !== null ? <span className="text-xl font-black tabular-nums text-red-400">{podcastProgress}%</span> : <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-red-500" />}
+                       </div>
+                       {podcastProgress !== null && <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={podcastProgress} className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-red-600 transition-[width] duration-150" style={{ width: `${podcastProgress}%` }} /></div>}
                      </div>}
                   </div>
                 </div>
