@@ -21,14 +21,91 @@ export default function Navbar() {
   }, [location.pathname])
 
   const linkClass = (path) =>
-    `relative py-2 transition after:absolute after:inset-x-0 after:-bottom-1 after:h-[2px] after:origin-left after:bg-red-600 after:transition-transform ${
-      location.pathname === path
-        ? "text-white after:scale-x-100"
-        : "text-white/55 hover:text-white after:scale-x-0 hover:after:scale-x-100"
-    }`
+    `fd-glass-link ${location.pathname === path ? "fd-glass-active" : ""}`
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.10] bg-[#090909]/60 supports-[backdrop-filter]:bg-[#090909]/45 backdrop-blur-[24px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(24px)_saturate(180%)] shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
+    <header className="fd-glass-header sticky top-0 z-50">
+      <style>{`
+        .fd-glass-header {
+          background: rgba(14, 14, 16, .42);
+          -webkit-backdrop-filter: blur(28px) saturate(145%);
+          backdrop-filter: blur(28px) saturate(145%);
+          border-bottom: 1px solid rgba(255,255,255,.13);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 32px rgba(0,0,0,.12);
+          isolation: isolate;
+        }
+        .fd-glass-header::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: linear-gradient(180deg,rgba(255,255,255,.065),transparent 85%);
+          z-index: -1;
+        }
+        .fd-glass-link {
+          position: relative;
+          display: inline-flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 39px;
+          padding: 0 16px;
+          border: 1px solid transparent;
+          border-radius: 9999px;
+          color: rgba(255,255,255,.72);
+          transition: background .22s ease, border-color .22s ease, box-shadow .22s ease, color .22s ease, transform .22s ease;
+        }
+        .fd-glass-link:hover, .fd-glass-link:focus-visible {
+          color: #fff;
+          background: rgba(255,255,255,.14);
+          border-color: rgba(255,255,255,.24);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 18px rgba(0,0,0,.14);
+          -webkit-backdrop-filter: blur(16px);
+          backdrop-filter: blur(16px);
+          transform: translateY(-1px);
+          outline: none;
+        }
+        .fd-glass-active {
+          color: #fff;
+          background: rgba(255,255,255,.095);
+          border-color: rgba(255,255,255,.12);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+        }
+        .fd-glass-icon {
+          background: rgba(255,255,255,.055);
+          border: 1px solid rgba(255,255,255,.15);
+          -webkit-backdrop-filter: blur(14px);
+          backdrop-filter: blur(14px);
+          transition: background .2s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+        .fd-glass-icon:hover, .fd-glass-icon:focus-visible {
+          background: rgba(255,255,255,.18);
+          border-color: rgba(255,255,255,.32);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+        }
+        .fd-glass-mobile {
+          background: rgba(17,17,19,.68);
+          -webkit-backdrop-filter: blur(28px) saturate(140%);
+          backdrop-filter: blur(28px) saturate(140%);
+          border-top: 1px solid rgba(255,255,255,.12);
+        }
+        .fd-glass-mobile-link {
+          border-radius: 13px;
+          padding: 12px 14px;
+          transition: background .2s ease;
+        }
+        .fd-glass-mobile-link:active, .fd-glass-mobile-link:focus-visible {
+          background: rgba(255,255,255,.15);
+          outline: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .fd-glass-link, .fd-glass-icon, .fd-glass-mobile-link { transition: none; }
+          .fd-glass-link:hover { transform: none; }
+        }
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+          .fd-glass-header { background: rgba(15,15,16,.94); }
+          .fd-glass-mobile { background: rgba(15,15,16,.97); }
+        }
+      `}</style>
       <div className="fd-container flex h-[74px] items-center justify-between gap-5">
         <Link to="/" className="group flex items-center gap-2.5" aria-label="FattiDiretti Home">
           <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-red-600 text-[11px] font-black tracking-[-.04em] text-white shadow-[0_0_26px_rgba(220,38,38,.2)]">
@@ -39,7 +116,7 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-8 text-[13px] font-bold md:flex">
+        <nav className="hidden items-center gap-1 text-[13px] font-bold md:flex">
           <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/articles" className={linkClass("/articles")}>Articoli</Link>
           <Link to="/podcasts" className={linkClass("/podcasts")}>Podcast</Link>
@@ -50,7 +127,7 @@ export default function Navbar() {
           <Link
             to="/search"
             aria-label="Cerca"
-            className="grid h-10 w-10 place-items-center rounded-full border border-white/[0.09] bg-white/[0.02] text-white/60 transition hover:border-red-500/35 hover:bg-red-500/[0.08] hover:text-red-400"
+            className="fd-glass-icon grid h-10 w-10 place-items-center rounded-full text-white/80"
           >
             <Search size={17} />
           </Link>
@@ -75,7 +152,7 @@ export default function Navbar() {
 
         <button
           onClick={() => setMobileOpen((value) => !value)}
-          className="grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/[0.025] text-white md:hidden"
+          className="fd-glass-icon grid h-11 w-11 place-items-center rounded-full text-white md:hidden"
           aria-label="Menu"
           aria-expanded={mobileOpen}
         >
@@ -84,14 +161,14 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-white/[0.10] bg-[#090909]/75 backdrop-blur-[24px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(24px)_saturate(180%)] md:hidden">
+        <div className="fd-glass-mobile md:hidden">
           <div className="fd-container flex flex-col py-4 text-base font-bold text-white">
-            <Link to="/" className="border-b border-white/[0.07] py-3.5">Home</Link>
-            <Link to="/articles" className="border-b border-white/[0.07] py-3.5">Articoli</Link>
-            <Link to="/podcasts" className="border-b border-white/[0.07] py-3.5">Podcast</Link>
-            <Link to="/search" className="border-b border-white/[0.07] py-3.5">Cerca</Link>
-            <Link to="/chi-siamo" className="border-b border-white/[0.07] py-3.5">Chi siamo</Link>
-            {isAdmin && <Link to="/admin" className="py-3.5 text-red-500">Admin</Link>}
+            <Link to="/" className="fd-glass-mobile-link">Home</Link>
+            <Link to="/articles" className="fd-glass-mobile-link">Articoli</Link>
+            <Link to="/podcasts" className="fd-glass-mobile-link">Podcast</Link>
+            <Link to="/search" className="fd-glass-mobile-link">Cerca</Link>
+            <Link to="/chi-siamo" className="fd-glass-mobile-link">Chi siamo</Link>
+            {isAdmin && <Link to="/admin" className="fd-glass-mobile-link text-red-400">Admin</Link>}
 
             <Link
               to={user ? "/profile" : "/login"}
